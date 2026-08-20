@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "287906439843",
+    "project_id": "appfortv-4d6f0",
+    "storage_bucket": "appfortv-4d6f0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:287906439843:android:23205f2fac1aaaa3f5d516",
+        "android_client_info": {
+          "package_name": "com.cct.appfortv.flutter_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDj36jvYKiNFyURrYLmHefliirwlYbT6EY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
