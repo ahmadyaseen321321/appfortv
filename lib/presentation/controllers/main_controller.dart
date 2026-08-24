@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/utils/notification_service.dart';
@@ -8,10 +7,6 @@ import '../../data/models/device_model.dart';
 import '../../data/models/weather_model.dart';
 import '../../data/repositories/device_repository.dart';
 import '../../core/network/socket_service.dart';
-import '../views/code_view.dart';
-
-// Private alias to avoid circular imports
-typedef _CodeViewPage = CodeView;
 
 class MainController extends ChangeNotifier {
   final DeviceRepository _deviceRepository;
@@ -72,6 +67,14 @@ class MainController extends ChangeNotifier {
   String? _dialogMessage;
   String? get dialogMessage => _dialogMessage;
 
+  bool _isDisconnected = false;
+  bool get isDisconnected => _isDisconnected;
+
+  void clearDisconnected() {
+    _isDisconnected = false;
+    _dialogMessage = null;
+  }
+
   Timer? _tokenTimer;
 
   /// Extracts weather data embedded in the device payload.
@@ -95,7 +98,7 @@ class MainController extends ChangeNotifier {
   }
 
   Future<void> init(DeviceData? initialData) async {
-    _isRemoving = false; // reset guard on new session
+    _isDisconnected = false; // reset on new session
     if (initialData != null) {
       _deviceData = initialData;
     } else {
@@ -186,23 +189,15 @@ class MainController extends ChangeNotifier {
     }
   }
 
-  // Navigator key so we can navigate from outside the widget tree
-  static final navigatorKey = GlobalKey<NavigatorState>();
-
-  // Guard against double-fire (FCM + socket both firing simultaneously)
-  bool _isRemoving = false;
-
   void onScreenRemoved(String message) async {
-    if (_isRemoving) {
+    if (_isDisconnected) {
       debugPrint('MainController: onScreenRemoved — already in progress, skipping');
       return;
     }
-    _isRemoving = true;
 
     _tokenTimer?.cancel();
     _socketService.disconnect();
 
-    // Unsubscribe from the FCM device topic before clearing the session
     if (_deviceData != null) {
       final deviceId = _deviceData!.id?.toString() ?? _deviceData!.deviceCode;
       if (deviceId != null) {
@@ -213,32 +208,10 @@ class MainController extends ChangeNotifier {
     await SharedPrefsHelper.clearUser();
     _deviceData = null;
     _weatherData = null;
+    _isDisconnected = true;
 
-    debugPrint('MainController: onScreenRemoved($message) — navigating to CodeView');
-
-    // Use addPostFrameCallback so we navigate AFTER the current frame
-    // completes — avoids navigator being in a transitional/detached state
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final nav = navigatorKey.currentState;
-      debugPrint('MainController: navigatorKey.currentState = $nav');
-      if (nav != null && nav.mounted) {
-        nav.pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const _CodeViewPage()),
-          (route) => false,
-        ).then((_) => _isRemoving = false);
-      } else {
-        // Fallback: set dialog so _MainViewState handles it on next build
-        if (message == 'Deleted') {
-          _dialogMessage = ApiConstants.screenDeletedMsg;
-        } else if (message == 'Suspended') {
-          _dialogMessage = 'Screen has been suspended.';
-        } else {
-          _dialogMessage = ApiConstants.screenDisconnectedMsg;
-        }
-        notifyListeners();
-        _isRemoving = false;
-      }
-    });
+    debugPrint('MainController: onScreenRemoved($message) — setting isDisconnected=true');
+    notifyListeners();
   }
 
   void clearDialogMessage() {

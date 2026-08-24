@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ExoPlayer renderer configuration for Android TV boxes.
+
+  Many Amlogic/Rockchip TV boxes have buggy hardware H.264 decoders that
+  claim format_supported=YES but fail with MediaCodecVideoRenderer errors.
+
+  This config allows software decoder fallback when hardware fails.
+-->
+<ExoPlayerConfig>
+  <!-- Allow software decoder as fallback for video -->
+  <VideoDecoderOutputBufferRenderer
+      allowSoftwareRenderer="true"/>
+</ExoPlayerConfig>

@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import '../../core/constants/api_constants.dart';
 import '../../data/models/device_model.dart';
 import '../controllers/main_controller.dart';
-import '../widgets/custom_dialog.dart';
 import '../widgets/media_background_widget.dart';
 import '../widgets/weather_widget.dart';
 import 'code_view.dart';
@@ -21,15 +20,14 @@ class MainView extends StatefulWidget {
 }
 
 class _MainViewState extends State<MainView> {
-  // Focus node to receive remote control key events
   final FocusNode _focusNode = FocusNode();
+  bool _shouldNavigateToCode = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<MainController>().init(widget.initialDeviceData);
-      // Request focus so key events are delivered to this widget
       _focusNode.requestFocus();
     });
   }
@@ -40,23 +38,16 @@ class _MainViewState extends State<MainView> {
     super.dispose();
   }
 
-  void _checkDialogMessage(MainController controller) {
-    if (controller.dialogMessage != null) {
-      final msg = controller.dialogMessage!;
+  void _checkDisconnect(MainController controller) {
+    // Triggered when onScreenRemoved clears _deviceData and sets _disconnected
+    if (controller.isDisconnected && !_shouldNavigateToCode) {
+      _shouldNavigateToCode = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => CustomNoteDialog(
-            message: msg,
-            onClose: () {
-              Navigator.of(context).pop();
-              controller.clearDialogMessage();
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const CodeView()),
-              );
-            },
-          ),
+        if (!mounted) return;
+        controller.clearDisconnected();
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const CodeView()),
+          (route) => false,
         );
       });
     }
@@ -65,7 +56,7 @@ class _MainViewState extends State<MainView> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<MainController>();
-    _checkDialogMessage(controller);
+    _checkDisconnect(controller);
 
     final deviceData = controller.deviceData;
     final mediaPath = deviceData?.deviceVideo;

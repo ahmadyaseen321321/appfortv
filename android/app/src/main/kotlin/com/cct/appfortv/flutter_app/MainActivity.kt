@@ -1,5 +1,6 @@
 package com.cct.appfortv.flutter_app
 
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +25,17 @@ class MainActivity : FlutterActivity() {
         application.registerActivityLifecycleCallbacks(AppLifecycleTracker)
         extractIntentExtras(intent)
         applyWakeFlags(intent)
+
+        // If launched on boot, move to front immediately so the TV launcher
+        // can't push us to background and get us killed
+        if (intent?.getBooleanExtra("launched_on_boot", false) == true) {
+            moveTaskToFront()
+        }
+    }
+
+    private fun moveTaskToFront() {
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        am.moveTaskToFront(taskId, android.app.ActivityManager.MOVE_TASK_WITH_HOME)
     }
 
     override fun onNewIntent(intent: Intent) {

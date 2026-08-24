@@ -1,5 +1,6 @@
 package com.cct.appfortv.flutter_app
 
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -11,32 +12,14 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
-/**
- * Foreground service that wakes the screen and launches MainActivity.
- *
- * IMPORTANT: This service should only run when the app is NOT already
- * in the foreground. When the app is open, Flutter's onMessage listener
- * handles navigation directly — launching a new activity would spawn a
- * second Flutter engine and break navigation.
- *
- * AppLifecycleTracker (registered in MainActivity) tracks whether the
- * app is currently in the foreground so we can skip the launch if so.
- */
 class ForceOpenService : Service() {
 
     companion object {
-        private const val CHANNEL_ID = "force_open_channel"
-        private const val EXTRA_TYPE = "disconnect_type"
+        private const val CHANNEL_ID    = "force_open_channel"
+        private const val EXTRA_TYPE    = "disconnect_type"
         private const val WAKE_LOCK_TAG = "tvapp:disconnect_wake"
 
         fun launch(context: Context, disconnectType: String) {
-            // Skip if app is already in foreground — Flutter handles it there
-            if (AppLifecycleTracker.isInForeground) {
-                android.util.Log.d("ForceOpenService",
-                    "App is in foreground — skipping activity launch, Flutter handles it")
-                return
-            }
-
             val intent = Intent(context, ForceOpenService::class.java).apply {
                 putExtra(EXTRA_TYPE, disconnectType)
             }
@@ -46,23 +29,58 @@ class ForceOpenService : Service() {
                 context.startService(intent)
             }
         }
+
+        /** True if our MainActivity is currently the top visible activity. */
+        private fun isAppInForeground(context: Context): Boolean {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            @Suppress("DEPRECATION")
+            val tasks = am.getRunningTasks(1)
+            if (tasks.isNullOrEmpty()) return false
+            val topActivity = tasks[0].topActivity ?: return false
+            return topActivity.packageName == context.packageName
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val disconnectType = intent?.getStringExtra(EXTRA_TYPE) ?: "Disconnected"
+        val disconnectType = intent?.getStringExtra("disconnect_type") ?: "Disconnected"
+        val navigateTo = intent?.getStringExtra("navigate_to") ?: "code_view"
 
-        // Double-check — if app came to foreground between the check and here, skip
-        if (AppLifecycleTracker.isInForeground) {
-            android.util.Log.d("ForceOpenService", "App now in foreground — skipping launch")
+        // Must call startForeground immediately
+        startForeground(startId, buildSilentNotification())
+
+        // For boot launch — just open the app normally (no code_view flag)
+        if (navigateTo == "session") {
+            android.util.Log.d("ForceOpenService", "Boot launch — opening app")
+            val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
+                setAction(Intent.ACTION_MAIN)
+                addCategory(Intent.CATEGORY_LAUNCHER)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                putExtra("launched_on_boot", true)
+            }
+            applicationContext.startActivity(launchIntent)
+
+            // Keep the foreground service alive for 6 seconds so Android doesn't
+            // kill the process before MainActivity has fully rendered.
+            // Once the activity is visible, the process stays alive on its own.
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                stopSelf(startId)
+            }, 6000L)
+
+            return START_NOT_STICKY
+        }
+
+        if (isAppInForeground(applicationContext)) {
+            android.util.Log.d("ForceOpenService",
+                "App is in foreground — Flutter handles navigation, skipping launch")
             stopSelf(startId)
             return START_NOT_STICKY
         }
 
-        startForeground(startId, buildSilentNotification())
-
-        // Acquire wake lock to turn screen on
+        // App is in background or killed — wake screen and launch to CodeView
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         val wakeLock = pm.newWakeLock(
             PowerManager.FULL_WAKE_LOCK        or

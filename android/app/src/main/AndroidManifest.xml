@@ -11,6 +11,9 @@
     <!-- Wake screen on disconnect notification -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.DISABLE_KEYGUARD"/>
+    <!-- Required for AlarmManager.setExactAndAllowWhileIdle on boot -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
 
     <!-- Declare this is a TV app so it appears in the TV launcher -->
     <uses-feature android:name="android.software.leanback" android:required="false"/>
@@ -18,7 +21,7 @@
 
     <application
         android:label="flutter_app"
-        android:name="${applicationName}"
+        android:name=".TvApplication"
         android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher"
         android:banner="@mipmap/ic_launcher">
@@ -37,6 +40,12 @@
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme"/>
 
+            <!-- Disable Impeller — TV boxes crash with ImageReader/Impeller.
+                 Uses stable Skia/GL renderer instead. -->
+            <meta-data
+                android:name="io.flutter.embedding.android.EnableImpeller"
+                android:value="false"/>
+
             <!-- Standard phone/tablet launcher -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
@@ -50,15 +59,24 @@
             </intent-filter>
         </activity>
 
+        <!-- LaunchAlarmReceiver: AlarmManager backup for boot auto-start.
+             Fires 8s after boot even if the BootReceiver process was killed. -->
+        <receiver
+            android:name=".LaunchAlarmReceiver"
+            android:exported="false"/>
+
         <!-- Boot receiver: starts the app automatically when the TV box powers on -->
         <receiver
             android:name=".BootReceiver"
             android:exported="true"
-            android:enabled="true">
+            android:enabled="true"
+            android:directBootAware="true">
             <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
-                <!-- Some TV boxes use this alternative boot action -->
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </receiver>

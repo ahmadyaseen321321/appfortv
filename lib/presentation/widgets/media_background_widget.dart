@@ -59,6 +59,44 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
         lower.contains('.png?');
   }
 
+  bool get _isVideoMode {
+    final type = widget.bgType?.trim().toLowerCase();
+    final images = _slideshowImages;
+    bool result = false;
+
+    if (type == "video" || type == "vid" || type == "1") {
+      result = true;
+    } else if (type == "image" ||
+        type == "images" ||
+        type == "img" ||
+        type == "imgs" ||
+        type == "slideshow" ||
+        type == "0" ||
+        type == "2") {
+      result = false;
+    } else if (widget.showVideo == true && widget.showImages != true) {
+      result = true;
+    } else if (widget.showImages == true || widget.showVideo == false) {
+      result = false;
+    } else if (images.isNotEmpty) {
+      result = false;
+    } else if (widget.mediaPath != null &&
+        widget.mediaPath!.isNotEmpty &&
+        !_mediaPathIsImage) {
+      result = true;
+    }
+
+    debugPrint("=== [DEBUG] MediaBackgroundWidget._isVideoMode ===");
+    debugPrint("-> bgType prop: '${widget.bgType}' (Normalized: '$type')");
+    debugPrint("-> showVideo: ${widget.showVideo}, showImages: ${widget.showImages}");
+    debugPrint("-> mediaPath: '${widget.mediaPath}'");
+    debugPrint("-> slideshowImages count: ${images.length} -> $images");
+    debugPrint("-> RESULT _isVideoMode = $result");
+    debugPrint("=================================================");
+
+    return result;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -88,68 +126,21 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
     return true;
   }
 
-  bool get _isVideoMode {
-    final type = widget.bgType?.trim().toLowerCase();
-    final images = _slideshowImages;
-
-    bool result = false;
-
-    // 1. Explicit bg_type "video" -> ALWAYS VIDEO MODE!
-    if (type == "video" || type == "vid" || type == "1") {
-      result = true;
-    }
-    // 2. Explicit bg_type "image"/"images" -> ALWAYS IMAGE MODE!
-    else if (type == "image" ||
-        type == "images" ||
-        type == "img" ||
-        type == "imgs" ||
-        type == "slideshow" ||
-        type == "0" ||
-        type == "2") {
-      result = false;
-    }
-    // 3. Fallback when bgType is null or empty: check boolean flags
-    else if (widget.showVideo == true && widget.showImages != true) {
-      result = true;
-    } else if (widget.showImages == true || widget.showVideo == false) {
-      result = false;
-    }
-    // 4. Fallback: If slideshow images exist -> IMAGE MODE!
-    else if (images.isNotEmpty) {
-      result = false;
-    }
-    // 5. Fallback: If mediaPath is a video file and no slideshow images exist -> VIDEO MODE!
-    else if (widget.mediaPath != null &&
-        widget.mediaPath!.isNotEmpty &&
-        !_mediaPathIsImage) {
-      result = true;
-    } else {
-      result = false;
-    }
-
-    debugPrint("=== [DEBUG] MediaBackgroundWidget._isVideoMode ===");
-    debugPrint("-> bgType prop: '${widget.bgType}' (Normalized: '$type')");
-    debugPrint("-> showVideo: ${widget.showVideo}, showImages: ${widget.showImages}");
-    debugPrint("-> mediaPath: '${widget.mediaPath}'");
-    debugPrint("-> slideshowImages count: ${images.length} -> $images");
-    debugPrint("-> RESULT _isVideoMode = $result");
-    debugPrint("=================================================");
-
-    return result;
-  }
-
   void _initMedia() {
     final isVideo = _isVideoMode;
     final images = _slideshowImages;
 
-    debugPrint("MediaBackgroundWidget _initMedia: bgType='${widget.bgType}', isVideoMode=$isVideo, mediaPath='${widget.mediaPath}', imagesCount=${images.length}");
+    debugPrint("MediaBackgroundWidget _initMedia: bgType='${widget.bgType}', "
+        "isVideoMode=$isVideo, mediaPath='${widget.mediaPath}', "
+        "imagesCount=${images.length}");
 
     if (isVideo) {
       _slideshowTimer?.cancel();
       _slideshowTimer = null;
       _currentSlideIndex = 0;
-
-      if (widget.mediaPath != null && widget.mediaPath!.isNotEmpty && !_mediaPathIsImage) {
+      if (widget.mediaPath != null &&
+          widget.mediaPath!.isNotEmpty &&
+          !_mediaPathIsImage) {
         _startVideo();
       }
     } else {
@@ -158,7 +149,6 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
       _videoController = null;
       _isVideoInitialized = false;
       _hasVideoError = false;
-
       if (images.isNotEmpty) {
         _startSlideshowTimer(images.length);
       }
@@ -175,8 +165,10 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
     final fullUrl = ApiConstants.getFullStorageUrl(widget.mediaPath);
     debugPrint("Initializing VideoPlayer with URL: $fullUrl");
 
-    _videoController = VideoPlayerController.networkUrl(Uri.parse(fullUrl))
-      ..initialize().then((_) {
+    _videoController = VideoPlayerController.networkUrl(
+      Uri.parse(fullUrl),
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+    )..initialize().then((_) {
         if (mounted) {
           setState(() {
             _isVideoInitialized = true;
@@ -186,7 +178,7 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
           _videoController?.play();
         }
       }).catchError((error) {
-        debugPrint("Video initialization error for $fullUrl: $error");
+        debugPrint("Video error: $error");
         if (mounted) {
           setState(() {
             _hasVideoError = true;
@@ -199,7 +191,6 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
   void _startSlideshowTimer(int count) {
     _slideshowTimer?.cancel();
     if (count <= 1) return;
-
     _slideshowTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (mounted) {
         setState(() {
@@ -213,7 +204,6 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
     _slideshowTimer?.cancel();
     _slideshowTimer = null;
     _currentSlideIndex = 0;
-
     _videoController?.dispose();
     _videoController = null;
     _isVideoInitialized = false;
@@ -261,7 +251,7 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
               ),
               const SizedBox(height: 6),
               Text(
-                _videoErrorMessage ?? ApiConstants.getFullStorageUrl(widget.mediaPath),
+                _videoErrorMessage ?? '',
                 style: const TextStyle(color: Colors.white54, fontSize: 12),
                 textAlign: TextAlign.center,
               ),
@@ -276,66 +266,48 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
           child: CircularProgressIndicator(color: Colors.blueAccent),
         ),
       );
-    } else {
-      if (images.isNotEmpty) {
-        final safeIndex = _currentSlideIndex < images.length ? _currentSlideIndex : 0;
-        final currentImgPath = images[safeIndex];
-        final fullUrl = ApiConstants.getFullStorageUrl(currentImgPath);
+    }
 
-        return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 1000),
-          switchInCurve: Curves.easeIn,
-          switchOutCurve: Curves.easeOut,
-          child: SizedBox.expand(
-            key: ValueKey<String>(fullUrl),
-            child: CachedNetworkImage(
-              imageUrl: fullUrl,
-              fit: BoxFit.fill,
-              width: double.infinity,
-              height: double.infinity,
-              placeholder: (context, url) => Container(
-                color: Colors.black,
-                child: const Center(
-                  child: CircularProgressIndicator(color: Colors.blueAccent),
-                ),
-              ),
-              errorWidget: (context, url, error) => Container(
-                color: Colors.black,
-                child: const Icon(Icons.broken_image, color: Colors.white54, size: 48),
-              ),
-            ),
-          ),
-        );
-      }
-
-      if (_mediaPathIsImage && widget.mediaPath != null) {
-        final fullUrl = ApiConstants.getFullStorageUrl(widget.mediaPath);
-        return SizedBox.expand(
+    // Image / Slideshow
+    if (images.isNotEmpty) {
+      final safeIndex = _currentSlideIndex < images.length ? _currentSlideIndex : 0;
+      final fullUrl = ApiConstants.getFullStorageUrl(images[safeIndex]);
+      return AnimatedSwitcher(
+        duration: const Duration(milliseconds: 1000),
+        child: SizedBox.expand(
+          key: ValueKey<String>(fullUrl),
           child: CachedNetworkImage(
             imageUrl: fullUrl,
             fit: BoxFit.fill,
             width: double.infinity,
             height: double.infinity,
-            placeholder: (context, url) => Container(
-              color: Colors.black,
-              child: const Center(
-                child: CircularProgressIndicator(color: Colors.blueAccent),
-              ),
-            ),
-            errorWidget: (context, url, error) => Container(
+            placeholder: (_, __) => Container(color: Colors.black),
+            errorWidget: (_, __, ___) => Container(
               color: Colors.black,
               child: const Icon(Icons.broken_image, color: Colors.white54, size: 48),
             ),
           ),
-        );
-      }
-
-      return Container(
-        color: Colors.black,
-        child: const Center(
-          child: CircularProgressIndicator(color: Colors.blueAccent),
         ),
       );
     }
+
+    if (_mediaPathIsImage && widget.mediaPath != null) {
+      final fullUrl = ApiConstants.getFullStorageUrl(widget.mediaPath);
+      return SizedBox.expand(
+        child: CachedNetworkImage(
+          imageUrl: fullUrl,
+          fit: BoxFit.fill,
+          width: double.infinity,
+          height: double.infinity,
+          placeholder: (_, __) => Container(color: Colors.black),
+          errorWidget: (_, __, ___) => Container(
+            color: Colors.black,
+            child: const Icon(Icons.broken_image, color: Colors.white54, size: 48),
+          ),
+        ),
+      );
+    }
+
+    return Container(color: Colors.black);
   }
 }

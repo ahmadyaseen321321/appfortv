@@ -70,6 +70,11 @@ dependencies {
     // Required for native FcmService.kt to compile against Firebase classes
     implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
     implementation("com.google.firebase:firebase-messaging-ktx")
+
+    // ExoPlayer software decoder fallback for TV boxes with buggy hardware codecs.
+    // Provides FFmpeg-based software decoding when hardware H.264 fails.
+    implementation("androidx.media3:media3-exoplayer:1.3.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.3.1")
 }
 
 flutter {
