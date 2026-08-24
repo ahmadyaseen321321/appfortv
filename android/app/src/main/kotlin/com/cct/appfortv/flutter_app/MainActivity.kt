@@ -34,8 +34,12 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun moveTaskToFront() {
-        val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-        am.moveTaskToFront(taskId, android.app.ActivityManager.MOVE_TASK_WITH_HOME)
+        try {
+            val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            am.moveTaskToFront(taskId, android.app.ActivityManager.MOVE_TASK_WITH_HOME)
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "moveTaskToFront failed: ${e.message}")
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -122,16 +126,22 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * Catch any remote control key press that Flutter didn't consume and
-     * exit the app — mirrors the GestureDetector tap behaviour in main_view.
+     * Any remote control key press exits the app immediately.
+     *
+     * We do NOT call super first — Flutter consumes most DPAD/SELECT keys
+     * for focus traversal and would return true, preventing the exit.
+     *
+     * Volume keys are excluded so the user can still adjust volume.
      */
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Let Flutter handle it first; if it returns false (not consumed),
-        // we exit the app.
-        val handled = super.onKeyDown(keyCode, event)
-        if (!handled) {
-            finishAffinity()  // closes app and removes from recents
+        val isVolumeKey = keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+                          keyCode == KeyEvent.KEYCODE_VOLUME_DOWN ||
+                          keyCode == KeyEvent.KEYCODE_VOLUME_MUTE
+
+        if (!isVolumeKey) {
+            finishAffinity()  // close app and remove from recents
+            return true
         }
-        return true
+        return super.onKeyDown(keyCode, event)
     }
 }

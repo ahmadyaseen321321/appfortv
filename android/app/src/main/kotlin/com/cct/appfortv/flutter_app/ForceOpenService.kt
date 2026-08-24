@@ -1,43 +1,51 @@
 package com.cct.appfortv.flutter_app
 
-import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 
+/**
+ * Foreground service that wakes the screen and brings the app to front.
+ *
+ * ALWAYS posts a full-screen-intent notification — this is the ONLY method
+ * that Android 11 reliably honors from background on all TV boxes.
+ *
+ * Also attempts direct startActivity() since it now works after
+ * background_activity_starts_enabled=1 is set via ADB.
+ */
 class ForceOpenService : Service() {
 
     companion object {
-        private const val CHANNEL_ID    = "force_open_channel"
-        private const val EXTRA_TYPE    = "disconnect_type"
-        private const val WAKE_LOCK_TAG = "tvapp:disconnect_wake"
+        private const val TAG                 = "ForceOpenService"
+        private const val SERVICE_CHANNEL_ID  = "force_open_service_ch"
+        private const val ALERT_CHANNEL_ID    = "force_open_alert_ch"
+        private const val NOTIF_SERVICE_ID    = 8001
+        private const val NOTIF_ALERT_ID      = 8002
+        private const val WAKE_LOCK_TAG       = "tvapp:force_open"
 
         fun launch(context: Context, disconnectType: String) {
             val intent = Intent(context, ForceOpenService::class.java).apply {
-                putExtra(EXTRA_TYPE, disconnectType)
+                putExtra("disconnect_type", disconnectType)
+                putExtra("navigate_to", "code_view")
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "launch failed: ${e.message}")
             }
-        }
-
-        /** True if our MainActivity is currently the top visible activity. */
-        private fun isAppInForeground(context: Context): Boolean {
-            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            @Suppress("DEPRECATION")
-            val tasks = am.getRunningTasks(1)
-            if (tasks.isNullOrEmpty()) return false
-            val topActivity = tasks[0].topActivity ?: return false
-            return topActivity.packageName == context.packageName
         }
     }
 
@@ -46,76 +54,124 @@ class ForceOpenService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val disconnectType = intent?.getStringExtra("disconnect_type") ?: "Disconnected"
         val navigateTo = intent?.getStringExtra("navigate_to") ?: "code_view"
+        Log.d(TAG, "onStartCommand: disconnectType=$disconnectType navigateTo=$navigateTo")
 
-        // Must call startForeground immediately
-        startForeground(startId, buildSilentNotification())
+        // Must call startForeground immediately (within 5s on Android 8+)
+        startForeground(NOTIF_SERVICE_ID, buildServiceNotification())
 
-        // For boot launch — just open the app normally (no code_view flag)
-        if (navigateTo == "session") {
-            android.util.Log.d("ForceOpenService", "Boot launch — opening app")
-            val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
-                setAction(Intent.ACTION_MAIN)
-                addCategory(Intent.CATEGORY_LAUNCHER)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                putExtra("launched_on_boot", true)
-            }
-            applicationContext.startActivity(launchIntent)
-
-            // Keep the foreground service alive for 6 seconds so Android doesn't
-            // kill the process before MainActivity has fully rendered.
-            // Once the activity is visible, the process stays alive on its own.
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                stopSelf(startId)
-            }, 6000L)
-
-            return START_NOT_STICKY
+        // Acquire wake lock — turns on the screen
+        var wakeLock: PowerManager.WakeLock? = null
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            @Suppress("DEPRECATION")
+            wakeLock = pm.newWakeLock(
+                PowerManager.FULL_WAKE_LOCK        or
+                PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                PowerManager.ON_AFTER_RELEASE,
+                WAKE_LOCK_TAG
+            )
+            wakeLock.acquire(30_000L)
+            Log.d(TAG, "WakeLock acquired")
+        } catch (e: Exception) {
+            Log.w(TAG, "WakeLock failed: ${e.message}")
         }
-
-        if (isAppInForeground(applicationContext)) {
-            android.util.Log.d("ForceOpenService",
-                "App is in foreground — Flutter handles navigation, skipping launch")
-            stopSelf(startId)
-            return START_NOT_STICKY
-        }
-
-        // App is in background or killed — wake screen and launch to CodeView
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        val wakeLock = pm.newWakeLock(
-            PowerManager.FULL_WAKE_LOCK        or
-            PowerManager.ACQUIRE_CAUSES_WAKEUP or
-            PowerManager.ON_AFTER_RELEASE,
-            WAKE_LOCK_TAG
-        )
-        wakeLock.acquire(10_000L)
 
         val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
+            action = Intent.ACTION_MAIN
+            addCategory(Intent.CATEGORY_LAUNCHER)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            putExtra("navigate_to", "code_view")
+            putExtra("navigate_to", navigateTo)
             putExtra("disconnect_type", disconnectType)
+            putExtra("launched_on_boot", true)
         }
-        applicationContext.startActivity(launchIntent)
 
-        wakeLock.release()
-        stopSelf(startId)
+        // ── ALWAYS post full-screen notification ──────────────────────────────
+        // This is the ONLY method Android 11 reliably honors from background.
+        // A full-screen intent with USE_FULL_SCREEN_INTENT permission will
+        // auto-launch the activity when the device screen is off or on lockscreen.
+        try {
+            postFullScreenNotification(launchIntent)
+            Log.d(TAG, "Full-screen notification: posted")
+        } catch (e: Exception) {
+            Log.e(TAG, "Full-screen notification failed: ${e.message}")
+        }
+
+        // ── Also try direct startActivity ─────────────────────────────────────
+        // With background_activity_starts_enabled=1, this should now work too
+        try {
+            applicationContext.startActivity(launchIntent)
+            Log.d(TAG, "Direct startActivity: SUCCESS")
+        } catch (e: Exception) {
+            Log.w(TAG, "Direct startActivity failed: ${e.message}")
+        }
+
+        // Don't release wake lock or stop immediately — give the activity
+        // time to actually start and render
+        android.os.Handler(mainLooper).postDelayed({
+            try {
+                wakeLock?.release()
+            } catch (e: Exception) { /* already released */ }
+            stopSelf(startId)
+        }, 10_000L)
+
         return START_NOT_STICKY
     }
 
-    private fun buildSilentNotification(): Notification {
+    private fun postFullScreenNotification(launchIntent: Intent) {
+        val pendingIntent = PendingIntent.getActivity(
+            applicationContext,
+            NOTIF_ALERT_ID,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val alertChannel = NotificationChannel(
+                ALERT_CHANNEL_ID,
+                "TV App Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                setSound(null, null)
+                enableVibration(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            getSystemService(NotificationManager::class.java)
+                ?.createNotificationChannel(alertChannel)
+        }
+
+        val alertNotif = NotificationCompat.Builder(applicationContext, ALERT_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("TV Display")
+            .setContentText("Starting...")
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setFullScreenIntent(pendingIntent, true)
+            .build()
+
+        getSystemService(NotificationManager::class.java)
+            ?.notify(NOTIF_ALERT_ID, alertNotif)
+    }
+
+    private fun buildServiceNotification(): Notification {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID, "TV App", NotificationManager.IMPORTANCE_LOW
+                SERVICE_CHANNEL_ID,
+                "TV App Service",
+                NotificationManager.IMPORTANCE_LOW
             )
             getSystemService(NotificationManager::class.java)
                 ?.createNotificationChannel(channel)
         }
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, SERVICE_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("TV App")
-            .setContentText("Updating…")
+            .setContentText("Starting…")
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setSilent(true)
             .build()

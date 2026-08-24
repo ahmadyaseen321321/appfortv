@@ -281,8 +281,8 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
             fit: BoxFit.fill,
             width: double.infinity,
             height: double.infinity,
-            placeholder: (_, __) => Container(color: Colors.black),
-            errorWidget: (_, __, ___) => Container(
+            placeholder: (_, _) => Container(color: Colors.black),
+            errorWidget: (_, _, _) => Container(
               color: Colors.black,
               child: const Icon(Icons.broken_image, color: Colors.white54, size: 48),
             ),
@@ -299,8 +299,8 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
           fit: BoxFit.fill,
           width: double.infinity,
           height: double.infinity,
-          placeholder: (_, __) => Container(color: Colors.black),
-          errorWidget: (_, __, ___) => Container(
+          placeholder: (_, _) => Container(color: Colors.black),
+          errorWidget: (_, _, _) => Container(
             color: Colors.black,
             child: const Icon(Icons.broken_image, color: Colors.white54, size: 48),
           ),

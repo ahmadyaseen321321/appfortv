@@ -8,12 +8,14 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SHORT_SERVICE"/>
+    <uses-permission android:name="android.permission.REORDER_TASKS"/>
     <!-- Wake screen on disconnect notification -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.DISABLE_KEYGUARD"/>
     <!-- Required for AlarmManager.setExactAndAllowWhileIdle on boot -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 
     <!-- Declare this is a TV app so it appears in the TV launcher -->
     <uses-feature android:name="android.software.leanback" android:required="false"/>
@@ -57,10 +59,28 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
+
+            <!-- Register as a Home app so user can set this as default launcher.
+                 When set as default, Android launches this app automatically on boot
+                 instead of the stock TV launcher. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.HOME"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
         </activity>
 
-        <!-- LaunchAlarmReceiver: AlarmManager backup for boot auto-start.
-             Fires 8s after boot even if the BootReceiver process was killed. -->
+        <!-- BootContentProvider: auto-initializes the app process on boot.
+             ContentProviders are started by the framework before Application.onCreate()
+             and are more reliable than BroadcastReceivers on many TV boxes. -->
+        <provider
+            android:name=".BootContentProvider"
+            android:authorities="${applicationId}.bootprovider"
+            android:exported="false"
+            android:enabled="true"
+            android:directBootAware="true"/>
+
+        <!-- LaunchAlarmReceiver: AlarmManager backup for boot auto-start. -->
         <receiver
             android:name=".LaunchAlarmReceiver"
             android:exported="false"/>
@@ -76,6 +96,8 @@
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="android.intent.action.REBOOT"/>
+                <action android:name="android.intent.action.USER_PRESENT"/>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
