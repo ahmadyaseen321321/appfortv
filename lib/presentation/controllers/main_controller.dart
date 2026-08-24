@@ -1,25 +1,26 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import '../../core/constants/api_constants.dart';
+import '../../core/utils/notification_service.dart';
 import '../../core/utils/shared_prefs_helper.dart';
 import '../../data/models/device_model.dart';
 import '../../data/models/weather_model.dart';
 import '../../data/repositories/device_repository.dart';
-import '../../data/repositories/weather_repository.dart';
-import '../../core/utils/notification_service.dart';
 import '../../core/network/socket_service.dart';
+import '../views/code_view.dart';
+
+// Private alias to avoid circular imports
+typedef _CodeViewPage = CodeView;
 
 class MainController extends ChangeNotifier {
   final DeviceRepository _deviceRepository;
-  final WeatherRepository _weatherRepository;
   final SocketService _socketService;
 
   MainController({
     DeviceRepository? deviceRepository,
-    WeatherRepository? weatherRepository,
     SocketService? socketService,
   })  : _deviceRepository = deviceRepository ?? DeviceRepository(),
-        _weatherRepository = weatherRepository ?? WeatherRepository(),
         _socketService = socketService ?? SocketService() {
     _setupNotificationListeners();
     _setupSocketListeners();
@@ -35,6 +36,13 @@ class MainController extends ChangeNotifier {
         refreshDeviceDetails(_deviceData!.deviceCode!);
       }
     };
+    // When Firebase rotates the FCM token, re-register it with the backend
+    ns.onTokenRefreshed = (newToken) {
+      debugPrint('MainController: FCM token refreshed — re-registering with backend');
+      if (_deviceData?.deviceCode != null) {
+        refreshDeviceDetails(_deviceData!.deviceCode!);
+      }
+    };
   }
 
   void _setupSocketListeners() {
@@ -42,15 +50,8 @@ class MainController extends ChangeNotifier {
       debugPrint("MainController: Socket device_updated received: ${newDeviceData.deviceCode}");
       _deviceData = newDeviceData;
       await SharedPrefsHelper.saveUser(_deviceData!);
+      _extractWeatherFromDevice(_deviceData!);
       notifyListeners();
-
-      if (_deviceData?.lat != null && _deviceData?.longitude != null) {
-        final lat = double.tryParse(_deviceData!.lat!);
-        final lon = double.tryParse(_deviceData!.longitude!);
-        if (lat != null && lon != null) {
-          await fetchWeather(lat, lon);
-        }
-      }
     };
 
     _socketService.onDeviceStatusDisconnected = () {
@@ -71,8 +72,22 @@ class MainController extends ChangeNotifier {
   String? _dialogMessage;
   String? get dialogMessage => _dialogMessage;
 
-  Timer? _weatherTimer;
   Timer? _tokenTimer;
+
+  /// Extracts weather data embedded in the device payload.
+  void _extractWeatherFromDevice(DeviceData data) {
+    final temp = data.temprature;
+    final icon = data.weatherIcon;
+    final desc = data.weatherDesc;
+    if ((temp != null && temp.isNotEmpty) ||
+        (icon != null && icon.isNotEmpty)) {
+      _weatherData = WeatherData(
+        temperature: temp,
+        iconUrl: icon,
+        description: desc,
+      );
+    }
+  }
 
   void setDeviceData(DeviceData data) {
     _deviceData = data;
@@ -80,10 +95,15 @@ class MainController extends ChangeNotifier {
   }
 
   Future<void> init(DeviceData? initialData) async {
+    _isRemoving = false; // reset guard on new session
     if (initialData != null) {
       _deviceData = initialData;
     } else {
       _deviceData = await SharedPrefsHelper.fetchUser();
+    }
+
+    if (_deviceData != null) {
+      _extractWeatherFromDevice(_deviceData!);
     }
 
     if (_deviceData?.deviceCode != null) {
@@ -91,7 +111,6 @@ class MainController extends ChangeNotifier {
       await refreshDeviceDetails(_deviceData!.deviceCode!);
     }
 
-    _startWeatherTimer();
     _startTokenPolling();
   }
 
@@ -100,7 +119,14 @@ class MainController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _deviceRepository.getDeviceDetails(code);
+      // Always include the FCM token so the backend keeps it up-to-date
+      final fcmToken = await NotificationService().getToken();
+      debugPrint('MainController: refreshDeviceDetails code=$code token=$fcmToken');
+
+      final response = await _deviceRepository.getDeviceDetails(
+        code,
+        deviceToken: fcmToken,
+      );
       _isLoading = false;
 
       if (response.status == true &&
@@ -108,16 +134,8 @@ class MainController extends ChangeNotifier {
           response.data?.deviceStatus != 'disconnected') {
         _deviceData = response.data;
         await SharedPrefsHelper.saveUser(_deviceData!);
+        _extractWeatherFromDevice(_deviceData!);
         notifyListeners();
-
-        // Fetch weather for lat/lon if present
-        if (_deviceData?.lat != null && _deviceData?.longitude != null) {
-          final lat = double.tryParse(_deviceData!.lat!);
-          final lon = double.tryParse(_deviceData!.longitude!);
-          if (lat != null && lon != null) {
-            await fetchWeather(lat, lon);
-          }
-        }
       } else {
         _dialogMessage = ApiConstants.screenDisconnectedMsg;
         await SharedPrefsHelper.clearUser();
@@ -127,29 +145,6 @@ class MainController extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
-  }
-
-  Future<void> fetchWeather(double latitude, double longitude) async {
-    try {
-      final weather = await _weatherRepository.getWeatherDetails(latitude, longitude);
-      _weatherData = weather;
-      notifyListeners();
-    } catch (e) {
-      debugPrint("Weather fetch error: $e");
-    }
-  }
-
-  void _startWeatherTimer() {
-    _weatherTimer?.cancel();
-    _weatherTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      if (_deviceData?.lat != null && _deviceData?.longitude != null) {
-        final lat = double.tryParse(_deviceData!.lat!);
-        final lon = double.tryParse(_deviceData!.longitude!);
-        if (lat != null && lon != null) {
-          fetchWeather(lat, lon);
-        }
-      }
-    });
   }
 
   void _startTokenPolling() {
@@ -163,11 +158,14 @@ class MainController extends ChangeNotifier {
 
   Future<void> _checkDeviceToken(String code) async {
     try {
-      final response = await _deviceRepository.checkToken(code);
+      final fcmToken = await NotificationService().getToken();
+      final response = await _deviceRepository.checkToken(
+        code,
+        deviceToken: fcmToken,
+      );
       if (response.status == true && response.data != null) {
         final newData = response.data!;
-        
-        // If status is disconnected, handle it
+
         if (newData.deviceStatus == 'disconnected') {
           onScreenRemoved('Disconnected');
           return;
@@ -175,9 +173,9 @@ class MainController extends ChangeNotifier {
 
         _deviceData = newData;
         await SharedPrefsHelper.saveUser(_deviceData!);
+        _extractWeatherFromDevice(_deviceData!);
         notifyListeners();
       } else if (response.status == false) {
-        // Handle Disconnected, Deleted, or Suspended status from API
         final msg = response.message;
         if (msg == 'Disconnected' || msg == 'Deleted' || msg == 'Suspended') {
           onScreenRemoved(msg!);
@@ -188,17 +186,59 @@ class MainController extends ChangeNotifier {
     }
   }
 
+  // Navigator key so we can navigate from outside the widget tree
+  static final navigatorKey = GlobalKey<NavigatorState>();
+
+  // Guard against double-fire (FCM + socket both firing simultaneously)
+  bool _isRemoving = false;
+
   void onScreenRemoved(String message) async {
-    _socketService.disconnect();
-    if (message == 'Deleted') {
-      _dialogMessage = ApiConstants.screenDeletedMsg;
-    } else if (message == 'Suspended') {
-      _dialogMessage = "Screen has been suspended.";
-    } else {
-      _dialogMessage = ApiConstants.screenDisconnectedMsg;
+    if (_isRemoving) {
+      debugPrint('MainController: onScreenRemoved — already in progress, skipping');
+      return;
     }
+    _isRemoving = true;
+
+    _tokenTimer?.cancel();
+    _socketService.disconnect();
+
+    // Unsubscribe from the FCM device topic before clearing the session
+    if (_deviceData != null) {
+      final deviceId = _deviceData!.id?.toString() ?? _deviceData!.deviceCode;
+      if (deviceId != null) {
+        await NotificationService().unsubscribeFromDeviceTopic(deviceId);
+      }
+    }
+
     await SharedPrefsHelper.clearUser();
-    notifyListeners();
+    _deviceData = null;
+    _weatherData = null;
+
+    debugPrint('MainController: onScreenRemoved($message) — navigating to CodeView');
+
+    // Use addPostFrameCallback so we navigate AFTER the current frame
+    // completes — avoids navigator being in a transitional/detached state
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final nav = navigatorKey.currentState;
+      debugPrint('MainController: navigatorKey.currentState = $nav');
+      if (nav != null && nav.mounted) {
+        nav.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const _CodeViewPage()),
+          (route) => false,
+        ).then((_) => _isRemoving = false);
+      } else {
+        // Fallback: set dialog so _MainViewState handles it on next build
+        if (message == 'Deleted') {
+          _dialogMessage = ApiConstants.screenDeletedMsg;
+        } else if (message == 'Suspended') {
+          _dialogMessage = 'Screen has been suspended.';
+        } else {
+          _dialogMessage = ApiConstants.screenDisconnectedMsg;
+        }
+        notifyListeners();
+        _isRemoving = false;
+      }
+    });
   }
 
   void clearDialogMessage() {
@@ -208,7 +248,6 @@ class MainController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _weatherTimer?.cancel();
     _tokenTimer?.cancel();
     _socketService.disconnect();
     super.dispose();

@@ -236,7 +236,7 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
       if (_isVideoInitialized && _videoController != null) {
         return SizedBox.expand(
           child: FittedBox(
-            fit: BoxFit.cover,
+            fit: BoxFit.fill,
             child: SizedBox(
               width: _videoController!.value.size.width,
               height: _videoController!.value.size.height,
@@ -290,7 +290,7 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
             key: ValueKey<String>(fullUrl),
             child: CachedNetworkImage(
               imageUrl: fullUrl,
-              fit: BoxFit.cover,
+              fit: BoxFit.fill,
               width: double.infinity,
               height: double.infinity,
               placeholder: (context, url) => Container(
@@ -310,20 +310,22 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
 
       if (_mediaPathIsImage && widget.mediaPath != null) {
         final fullUrl = ApiConstants.getFullStorageUrl(widget.mediaPath);
-        return CachedNetworkImage(
-          imageUrl: fullUrl,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
-          placeholder: (context, url) => Container(
-            color: Colors.black,
-            child: const Center(
-              child: CircularProgressIndicator(color: Colors.blueAccent),
+        return SizedBox.expand(
+          child: CachedNetworkImage(
+            imageUrl: fullUrl,
+            fit: BoxFit.fill,
+            width: double.infinity,
+            height: double.infinity,
+            placeholder: (context, url) => Container(
+              color: Colors.black,
+              child: const Center(
+                child: CircularProgressIndicator(color: Colors.blueAccent),
+              ),
             ),
-          ),
-          errorWidget: (context, url, error) => Container(
-            color: Colors.black,
-            child: const Icon(Icons.broken_image, color: Colors.white54, size: 48),
+            errorWidget: (context, url, error) => Container(
+              color: Colors.black,
+              child: const Icon(Icons.broken_image, color: Colors.white54, size: 48),
+            ),
           ),
         );
       }

@@ -26,6 +26,15 @@ class _CodeViewState extends State<CodeView> {
 
   Future<void> _checkSession() async {
     final controller = context.read<CodeController>();
+
+    // If a disconnect notification arrived while app was killed,
+    // the background handler saved a flag — honour it and stay on CodeView.
+    final hasPendingDisconnect = await controller.hasPendingDisconnect();
+    if (hasPendingDisconnect) {
+      await controller.clearPendingDisconnect();
+      return; // stay on CodeView
+    }
+
     final savedData = await controller.checkSavedSession();
     if (savedData != null && mounted) {
       Navigator.of(context).pushReplacement(

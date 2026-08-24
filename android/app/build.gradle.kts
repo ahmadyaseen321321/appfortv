@@ -1,13 +1,12 @@
 plugins {
     id("com.android.application")
     id("com.google.gms.google-services")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
     namespace = "com.cct.appfortv.flutter_app"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -16,21 +15,47 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.cct.appfortv.flutter_app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Build a separate APK per ABI so each TV box gets a clean,
+        // compatible package. A universal fat APK is also produced as fallback.
+        splits {
+            abi {
+                isEnable = true
+                reset()
+                include("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+                isUniversalApk = true
+            }
+        }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Replace with your own keystore for production builds.
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+// Assign unique versionCodes to each ABI split using the AGP 9.x API
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abiFilter = output.filters.find {
+                it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI
+            }
+            val abiCode = when (abiFilter?.identifier) {
+                "armeabi-v7a" -> 1
+                "arm64-v8a"   -> 2
+                "x86"         -> 3
+                "x86_64"      -> 4
+                else          -> 0  // universal
+            }
+            output.versionCode.set((flutter.versionCode ?: 1) * 10 + abiCode)
         }
     }
 }
@@ -39,6 +64,12 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    // Required for native FcmService.kt to compile against Firebase classes
+    implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
+    implementation("com.google.firebase:firebase-messaging-ktx")
 }
 
 flutter {

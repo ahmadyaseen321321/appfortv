@@ -94,6 +94,8 @@ class DeviceData {
   final bool? showVideo;
   final bool? showImages;
   final String? bgType;
+  final String? weatherIcon;
+  final String? weatherDesc;
 
   DeviceData({
     this.id,
@@ -120,6 +122,8 @@ class DeviceData {
     this.showVideo,
     this.showImages,
     this.bgType,
+    this.weatherIcon,
+    this.weatherDesc,
   });
 
   factory DeviceData.fromJson(Map<String, dynamic> json) {
@@ -160,7 +164,7 @@ class DeviceData {
       id: json['id'] is int ? json['id'] as int? : int.tryParse(json['id']?.toString() ?? ''),
       userId: json['user_id'] is int ? json['user_id'] as int? : int.tryParse(json['user_id']?.toString() ?? ''),
       deviceVideo: json['device_vedio']?.toString() ?? json['device_video']?.toString(),
-      deviceLogo: json['device_logo']?.toString(),
+      deviceLogo: _sanitizePath(json['device_logo']?.toString()),
       tvName: json['device_name']?.toString() ?? json['tv_name']?.toString(),
       count: json['count'] is int ? json['count'] as int? : int.tryParse(json['count']?.toString() ?? ''),
       guestName: json['device_heading']?.toString() ??
@@ -188,6 +192,8 @@ class DeviceData {
           ? json['show_images'] as bool?
           : (json['show_images']?.toString() == 'true' || json['show_images']?.toString() == '1'),
       bgType: bgTypeVal,
+      weatherIcon: _sanitizePath(json['weather_icon']?.toString()),
+      weatherDesc: _sanitizePath(json['weather_desc']?.toString()),
     );
   }
 
@@ -217,7 +223,20 @@ class DeviceData {
       'show_video': showVideo,
       'show_images': showImages,
       'bg_type': bgType,
+      'weather_icon': weatherIcon,
+      'weather_desc': weatherDesc,
     };
+  }
+
+  /// Returns null if the path is empty, the literal string "null", or clearly
+  /// a server-side placeholder/default (e.g. "images/hilton.png").
+  /// This ensures removed assets are treated as absent on the TV display.
+  static String? _sanitizePath(String? path) {
+    if (path == null) return null;
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) return null;
+    if (trimmed.toLowerCase() == 'null') return null;
+    return trimmed;
   }
 
   bool isVideoMedia() {

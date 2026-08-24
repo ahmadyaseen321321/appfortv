@@ -39,6 +39,7 @@ class TvApp extends StatelessWidget {
       child: MaterialApp(
         title: 'App For TV',
         debugShowCheckedModeBanner: false,
+        navigatorKey: MainController.navigatorKey,
         theme: ThemeData.dark().copyWith(
           scaffoldBackgroundColor: const Color(0xFF0F172A),
           colorScheme: const ColorScheme.dark(

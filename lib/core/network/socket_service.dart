@@ -59,6 +59,13 @@ class SocketService {
       }
     });
 
+    // Spec event: device_disconnected — emitted by backend when a device
+    // is disconnected. Payload: { "status": false, "message": "Disconnected" }
+    _socket!.on('device_disconnected', (data) {
+      debugPrint("SocketService: Received device_disconnected event: $data");
+      onDeviceStatusDisconnected?.call();
+    });
+
     _socket!.on('device_status', (data) {
       debugPrint("SocketService: Received device_status event: $data");
       try {
@@ -73,6 +80,7 @@ class SocketService {
           if (connectedRaw != null && !isConnected) {
             onDeviceStatusDisconnected?.call();
           } else if (status == 'disconnected' ||
+              status == 'false' ||
               status == 'Deleted' ||
               status == 'Suspended') {
             onDeviceStatusDisconnected?.call();

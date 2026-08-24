@@ -21,12 +21,23 @@ class MainView extends StatefulWidget {
 }
 
 class _MainViewState extends State<MainView> {
+  // Focus node to receive remote control key events
+  final FocusNode _focusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<MainController>().init(widget.initialDeviceData);
+      // Request focus so key events are delivered to this widget
+      _focusNode.requestFocus();
     });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
   }
 
   void _checkDialogMessage(MainController controller) {
@@ -51,46 +62,6 @@ class _MainViewState extends State<MainView> {
     }
   }
 
-  void _closeApp() {
-    SystemNavigator.pop();
-  }
-
-  Widget _buildHiltonLogo() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF002B49), width: 2),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            "H",
-            style: GoogleFonts.cinzel(
-              color: const Color(0xFF002B49),
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          "Hilton",
-          style: GoogleFonts.cinzel(
-            color: const Color(0xFF002B49),
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<MainController>();
@@ -102,8 +73,21 @@ class _MainViewState extends State<MainView> {
     final guestName = deviceData?.guestName ?? "";
     final guestMessage = deviceData?.guestMessage ?? "";
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF1B1B1B),
+    return KeyboardListener(
+      focusNode: _focusNode,
+      autofocus: true,
+      // Any remote key press closes the app
+      onKeyEvent: (KeyEvent event) {
+        if (event is KeyDownEvent) {
+          SystemNavigator.pop();
+        }
+      },
+      child: GestureDetector(
+        // Touch/click anywhere also closes the app
+        onTap: () => SystemNavigator.pop(),
+        behavior: HitTestBehavior.opaque,
+        child: Scaffold(
+        backgroundColor: const Color(0xFF1B1B1B),
       body: Row(
         children: [
           // Left Side Panel
@@ -114,53 +98,30 @@ class _MainViewState extends State<MainView> {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                // Logo container at top
-                Container(
-                  width: double.infinity,
-                  height: 140,
-                  color: Colors.white,
-                  alignment: Alignment.center,
-                  child: logoPath != null && logoPath.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: ApiConstants.getFullStorageUrl(logoPath),
-                          fit: BoxFit.contain,
-                          width: 180,
-                          height: 100,
-                          placeholder: (context, url) => const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.black54,
-                            ),
-                          ),
-                          errorWidget: (context, url, err) => _buildHiltonLogo(),
-                        )
-                      : _buildHiltonLogo(),
-                ),
+                // Logo container at top — only shown when a valid logo exists.
+                // Uses a StatefulBuilder so the white box collapses if the
+                // image fails to load (e.g. backend returns a stale default).
+                if (logoPath != null && logoPath.isNotEmpty)
+                  _LogoWidget(logoUrl: ApiConstants.getFullStorageUrl(logoPath)),
                 const SizedBox(height: 36),
-                // "Exit App" button with underline
-                InkWell(
-                  onTap: _closeApp,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "Go to tv",
-                        style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        width: 65,
-                        height: 2,
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "Go to tv",
+                      style: GoogleFonts.inter(
                         color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w400,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      width: 65,
+                      height: 2,
+                      color: Colors.white,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -265,6 +226,56 @@ class _MainViewState extends State<MainView> {
             ),
           ),
         ],
+      ),
+      ), // Scaffold
+      ), // GestureDetector
+    ); // KeyboardListener
+  }
+}
+
+/// A self-contained logo widget that collapses entirely (zero height) when
+/// the image URL is unavailable or returns an error. This prevents the white
+/// container from showing when no custom logo has been set.
+class _LogoWidget extends StatefulWidget {
+  final String logoUrl;
+  const _LogoWidget({required this.logoUrl});
+
+  @override
+  State<_LogoWidget> createState() => _LogoWidgetState();
+}
+
+class _LogoWidgetState extends State<_LogoWidget> {
+  bool _hasError = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hasError) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      height: 140,
+      color: Colors.white,
+      alignment: Alignment.center,
+      child: CachedNetworkImage(
+        imageUrl: widget.logoUrl,
+        fit: BoxFit.contain,
+        width: 180,
+        height: 100,
+        placeholder: (context, url) => const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Colors.black54,
+          ),
+        ),
+        errorWidget: (context, url, err) {
+          // Collapse the container on next frame when image fails
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _hasError = true);
+          });
+          return const SizedBox.shrink();
+        },
       ),
     );
   }

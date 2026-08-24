@@ -23,11 +23,15 @@ class DeviceRepository {
     return DeviceResponse.fromJson(responseMap);
   }
 
-  Future<DeviceResponse> checkToken(String deviceCode) async {
+  Future<DeviceResponse> checkToken(String deviceCode, {String? deviceToken}) async {
+    final Map<String, String> queryParams = {'device_code': deviceCode};
+    if (deviceToken != null && deviceToken.isNotEmpty) {
+      queryParams['device_token'] = deviceToken;
+    }
     final responseMap = await apiClient.get(
       baseUrl: ApiConstants.deviceBaseUrl,
       path: ApiEndpoints.checkToken,
-      queryParameters: {'device_code': deviceCode},
+      queryParameters: queryParams,
     );
     return DeviceResponse.fromJson(responseMap);
   }

@@ -1,45 +1,40 @@
+/// Weather data now comes directly from the device API payload
+/// (fields: temprature, weather_icon, weather_desc).
+/// The [WeatherData] model wraps these three fields and is populated
+/// from [DeviceData] — no separate OpenWeatherMap call needed.
 class WeatherData {
-  final MainData? main;
-  final String? name;
-  final int? cod;
+  /// Pre-formatted temperature string from the server, e.g. "25°C".
+  final String? temperature;
 
-  WeatherData({this.main, this.name, this.cod});
+  /// Full URL to the weather condition icon, e.g.
+  /// "https://openweathermap.org/img/wn/01d@2x.png".
+  final String? iconUrl;
 
-  factory WeatherData.fromJson(Map<String, dynamic> json) {
+  /// Human-readable weather description, e.g. "clear sky".
+  final String? description;
+
+  const WeatherData({
+    this.temperature,
+    this.iconUrl,
+    this.description,
+  });
+
+  bool get hasData =>
+      (temperature != null && temperature!.isNotEmpty) ||
+      (iconUrl != null && iconUrl!.isNotEmpty);
+
+  /// Build from the flat device payload map (same shape as DeviceData.fromJson input).
+  factory WeatherData.fromDeviceJson(Map<String, dynamic> json) {
+    String? sanitize(String? v) {
+      if (v == null) return null;
+      final t = v.trim();
+      return (t.isEmpty || t.toLowerCase() == 'null') ? null : t;
+    }
+
     return WeatherData(
-      main: json['main'] != null ? MainData.fromJson(json['main']) : null,
-      name: json['name'] as String?,
-      cod: json['cod'] is int ? json['cod'] : (json['cod'] != null ? int.tryParse(json['cod'].toString()) : null),
+      temperature: sanitize(json['temprature']?.toString()),
+      iconUrl: sanitize(json['weather_icon']?.toString()),
+      description: sanitize(json['weather_desc']?.toString()),
     );
-  }
-}
-
-class MainData {
-  final double? temp;
-  final double? tempMin;
-  final double? tempMax;
-
-  MainData({this.temp, this.tempMin, this.tempMax});
-
-  factory MainData.fromJson(Map<String, dynamic> json) {
-    return MainData(
-      temp: (json['temp'] as num?)?.toDouble(),
-      tempMin: (json['temp_min'] as num?)?.toDouble(),
-      tempMax: (json['temp_max'] as num?)?.toDouble(),
-    );
-  }
-
-  int get tempFahrenheit {
-    final k = tempMax ?? temp ?? 0.0;
-    return ((k - 273.15) * 9 / 5 + 32).toInt();
-  }
-
-  int get tempCelsius {
-    final k = tempMax ?? temp ?? 0.0;
-    return (k - 273.15).toInt();
-  }
-
-  String get formattedTemp {
-    return "$tempFahrenheit F / $tempCelsius C";
   }
 }
