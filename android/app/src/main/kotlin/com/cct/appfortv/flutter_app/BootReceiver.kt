@@ -43,7 +43,9 @@ class BootReceiver : BroadcastReceiver() {
                      intentAction == "com.htc.intent.action.QUICKBOOT_POWERON" ||
                      intentAction == "android.intent.action.REBOOT" ||
                      intentAction == Intent.ACTION_MY_PACKAGE_REPLACED ||
-                     intentAction == Intent.ACTION_USER_PRESENT
+                     intentAction == Intent.ACTION_USER_PRESENT ||
+                     intentAction == Intent.ACTION_SCREEN_ON ||
+                     intentAction == "android.intent.action.DREAMING_STOPPED"
 
         if (!isBoot) return
 
