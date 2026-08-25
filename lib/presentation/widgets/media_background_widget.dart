@@ -155,6 +155,8 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
     }
   }
 
+  int _videoRetryCount = 0;
+
   void _startVideo() {
     setState(() {
       _hasVideoError = false;
@@ -163,29 +165,57 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
     });
 
     final fullUrl = ApiConstants.getFullStorageUrl(widget.mediaPath);
-    debugPrint("Initializing VideoPlayer with URL: $fullUrl");
+    debugPrint("Initializing VideoPlayer with URL: $fullUrl (retry: $_videoRetryCount)");
+
+    _videoController?.pause();
+    _videoController?.dispose();
+    _videoController = null;
+
+    // Use VideoViewType.platformView (Android SurfaceView) on first attempt so hardware video
+    // decoders on Android TV boxes (like Amlogic/Rockchip) render directly without failing on SurfaceTexture.
+    // Fallback to textureView if platformView fails.
+    final selectedViewType = (_videoRetryCount == 0)
+        ? VideoViewType.platformView
+        : VideoViewType.textureView;
 
     _videoController = VideoPlayerController.networkUrl(
       Uri.parse(fullUrl),
-      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-    )..initialize().then((_) {
-        if (mounted) {
-          setState(() {
-            _isVideoInitialized = true;
-            _hasVideoError = false;
+      viewType: selectedViewType,
+    );
+
+    _videoController!.initialize().then((_) {
+      if (mounted) {
+        _videoController?.setVolume(0.0);
+        _videoController?.setLooping(true);
+        _videoController?.play();
+        setState(() {
+          _isVideoInitialized = true;
+          _hasVideoError = false;
+          _videoRetryCount = 0;
+        });
+      }
+    }).catchError((error) {
+      debugPrint("Video error (attempt $_videoRetryCount): $error");
+      if (mounted) {
+        if (_videoRetryCount < 2) {
+          _videoRetryCount++;
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted && _isVideoMode) {
+              _startVideo();
+            }
           });
-          _videoController?.setLooping(true);
-          _videoController?.play();
-        }
-      }).catchError((error) {
-        debugPrint("Video error: $error");
-        if (mounted) {
+        } else {
           setState(() {
             _hasVideoError = true;
             _videoErrorMessage = error.toString();
           });
+          // If images are available as fallback, start slideshow timer for seamless fallback
+          if (_slideshowImages.isNotEmpty) {
+            _startSlideshowTimer(_slideshowImages.length);
+          }
         }
-      });
+      }
+    });
   }
 
   void _startSlideshowTimer(int count) {
@@ -209,6 +239,7 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
     _isVideoInitialized = false;
     _hasVideoError = false;
     _videoErrorMessage = null;
+    _videoRetryCount = 0;
   }
 
   @override
@@ -236,24 +267,47 @@ class _MediaBackgroundWidgetState extends State<MediaBackgroundWidget> {
         );
       }
 
+      // If video error occurred but slideshow images exist, seamlessly show slideshow
+      if (_hasVideoError && images.isNotEmpty) {
+        final safeIndex = _currentSlideIndex < images.length ? _currentSlideIndex : 0;
+        final fullUrl = ApiConstants.getFullStorageUrl(images[safeIndex]);
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 1000),
+          child: SizedBox.expand(
+            key: ValueKey<String>(fullUrl),
+            child: CachedNetworkImage(
+              imageUrl: fullUrl,
+              fit: BoxFit.fill,
+              width: double.infinity,
+              height: double.infinity,
+              placeholder: (_, _) => Container(color: Colors.black),
+              errorWidget: (_, _, _) => Container(color: Colors.black),
+            ),
+          ),
+        );
+      }
+
       if (_hasVideoError) {
         return Container(
           color: Colors.black,
           alignment: Alignment.center,
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, color: Colors.amberAccent, size: 48),
+              const Icon(Icons.videocam_off_outlined, color: Colors.amberAccent, size: 48),
               const SizedBox(height: 12),
               const Text(
-                "Unable to load video background",
-                style: TextStyle(color: Colors.white, fontSize: 16),
+                "Video background unavailable on this TV hardware",
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 6),
               Text(
                 _videoErrorMessage ?? '',
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                style: const TextStyle(color: Colors.white54, fontSize: 11),
                 textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

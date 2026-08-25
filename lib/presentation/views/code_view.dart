@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../core/utils/notification_service.dart';
+import '../../core/utils/shared_prefs_helper.dart';
 import '../controllers/code_controller.dart';
 import '../widgets/custom_dialog.dart';
 import 'main_view.dart';
@@ -27,16 +29,34 @@ class _CodeViewState extends State<CodeView> {
   Future<void> _checkSession() async {
     final controller = context.read<CodeController>();
 
-    // If a disconnect notification arrived while app was killed,
+    // 1. Check if native launched us with a disconnect intent
+    final nativeDisconnect = await NotificationService().hasNativePendingDisconnect();
+    if (nativeDisconnect) {
+      await NotificationService().clearPendingNavigation();
+      await SharedPrefsHelper.clearUser();
+      return; // Stay on CodeView, DO NOT open MainView!
+    }
+
+    // 2. If a disconnect notification arrived while app was killed,
     // the background handler saved a flag — honour it and stay on CodeView.
     final hasPendingDisconnect = await controller.hasPendingDisconnect();
     if (hasPendingDisconnect) {
       await controller.clearPendingDisconnect();
+      await SharedPrefsHelper.clearUser();
+      return; // stay on CodeView
+    }
+
+    // 3. If we just came from a disconnect flow (onScreenRemoved cleared user),
+    // stay on CodeView and require fresh code entry.
+    final justDisconnected = await SharedPrefsHelper.wasJustDisconnected();
+    if (justDisconnected) {
+      await SharedPrefsHelper.clearJustDisconnected();
+      await SharedPrefsHelper.clearUser();
       return; // stay on CodeView
     }
 
     final savedData = await controller.checkSavedSession();
-    if (savedData != null && mounted) {
+    if (savedData != null && savedData.deviceStatus != 'disconnected' && mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => MainView(initialDeviceData: savedData),

@@ -63,6 +63,16 @@ class SocketService {
     // is disconnected. Payload: { "status": false, "message": "Disconnected" }
     _socket!.on('device_disconnected', (data) {
       debugPrint("SocketService: Received device_disconnected event: $data");
+      try {
+        final Map<String, dynamic>? map = _extractMap(data);
+        if (map != null) {
+          final codeInPayload = map['code']?.toString() ?? map['device_code']?.toString() ?? map['deviceCode']?.toString();
+          if (codeInPayload != null && codeInPayload.isNotEmpty && codeInPayload != _currentDeviceCode) {
+            debugPrint("SocketService: device_disconnected code mismatch ($codeInPayload vs $_currentDeviceCode), ignoring.");
+            return;
+          }
+        }
+      } catch (_) {}
       onDeviceStatusDisconnected?.call();
     });
 
@@ -80,7 +90,6 @@ class SocketService {
           if (connectedRaw != null && !isConnected) {
             onDeviceStatusDisconnected?.call();
           } else if (status == 'disconnected' ||
-              status == 'false' ||
               status == 'Deleted' ||
               status == 'Suspended') {
             onDeviceStatusDisconnected?.call();

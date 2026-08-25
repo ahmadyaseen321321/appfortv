@@ -58,6 +58,13 @@ class _MainViewState extends State<MainView> {
     final controller = context.watch<MainController>();
     _checkDisconnect(controller);
 
+    if (controller.isDisconnected || controller.deviceData == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF141414),
+        body: SizedBox.expand(),
+      );
+    }
+
     final deviceData = controller.deviceData;
     final mediaPath = deviceData?.deviceVideo;
     final logoPath = deviceData?.deviceLogo;
@@ -67,138 +74,111 @@ class _MainViewState extends State<MainView> {
     return KeyboardListener(
       focusNode: _focusNode,
       autofocus: true,
-      // Any remote key press closes the app
       onKeyEvent: (KeyEvent event) {
         if (event is KeyDownEvent) {
           SystemNavigator.pop();
         }
       },
       child: GestureDetector(
-        // Touch/click anywhere also closes the app
         onTap: () => SystemNavigator.pop(),
         behavior: HitTestBehavior.opaque,
         child: Scaffold(
-        backgroundColor: const Color(0xFF1B1B1B),
-      body: Row(
-        children: [
-          // Left Side Panel
-          Container(
-            width: 220,
-            height: double.infinity,
-            color: const Color(0xFF181818),
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                // Logo container at top — only shown when a valid logo exists.
-                // Uses a StatefulBuilder so the white box collapses if the
-                // image fails to load (e.g. backend returns a stale default).
-                if (logoPath != null && logoPath.isNotEmpty)
-                  _LogoWidget(logoUrl: ApiConstants.getFullStorageUrl(logoPath)),
-                const SizedBox(height: 36),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      "Go to tv",
-                      style: GoogleFonts.inter(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      width: 65,
-                      height: 2,
-                      color: Colors.white,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-
-          // Right Main Content Area
-          Expanded(
-            child: Stack(
-              children: [
-                // Background Video or Image Media
-                Positioned.fill(
-                  child: MediaBackgroundWidget(
-                    key: ValueKey<String>(
-                      "${deviceData?.bgType}_${deviceData?.deviceVideo}_${deviceData?.bgImgs?.map((e) => e.bgImg).join('_')}",
-                    ),
-                    mediaPath: mediaPath,
-                    bgImgs: deviceData?.bgImgs,
-                    showVideo: deviceData?.showVideo,
-                    showImages: deviceData?.showImages,
-                    bgType: deviceData?.bgType,
-                  ),
-                ),
-
-                // Overlay gradient tint for optimal readability
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withAlpha(80),
-                          Colors.black.withAlpha(60),
-                          Colors.black.withAlpha(180),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Top Right Weather Display
-                Positioned(
-                  top: 24,
-                  right: 32,
-                  child: WeatherWidget(weatherData: controller.weatherData),
-                ),
-
-                // Bottom Left Overlay: Guest Name & Message
-                Positioned(
-                  left: 40,
-                  right: 40,
-                  bottom: 40,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (guestName.isNotEmpty)
+          backgroundColor: const Color(0xFF1B1B1B),
+          body: Row(
+            children: [
+              // Left Side Panel
+              Container(
+                width: 220,
+                height: double.infinity,
+                color: const Color(0xFF181818),
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      if (logoPath != null && logoPath.isNotEmpty)
+                        _LogoWidget(logoUrl: ApiConstants.getFullStorageUrl(logoPath)),
+                      const SizedBox(height: 36),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           Text(
-                            guestName,
+                            "Go to tv",
                             style: GoogleFonts.inter(
-                              color: const Color(0xFFFFE389),
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black.withAlpha(200),
-                                  blurRadius: 8,
-                                ),
-                              ],
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w400,
                             ),
                           ),
-                        if (guestName.isNotEmpty && guestMessage.isNotEmpty)
-                          const SizedBox(height: 12),
-                        if (guestMessage.isNotEmpty)
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 180),
-                            child: SingleChildScrollView(
-                              child: Text(
-                                guestMessage,
+                          const SizedBox(height: 6),
+                          Container(
+                            width: 65,
+                            height: 2,
+                            color: Colors.white,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Right Main Content Area
+              Expanded(
+                child: Stack(
+                  children: [
+                    // Background Video or Image Media
+                    Positioned.fill(
+                      child: MediaBackgroundWidget(
+                        key: ValueKey<String>(
+                          "${deviceData?.bgType}_${deviceData?.deviceVideo}_${deviceData?.bgImgs?.map((e) => e.bgImg).join('_')}",
+                        ),
+                        mediaPath: mediaPath,
+                        bgImgs: deviceData?.bgImgs,
+                        showVideo: deviceData?.showVideo,
+                        showImages: deviceData?.showImages,
+                        bgType: deviceData?.bgType,
+                      ),
+                    ),
+
+                    // Overlay gradient tint for optimal readability
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withAlpha(80),
+                              Colors.black.withAlpha(60),
+                              Colors.black.withAlpha(180),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Top Right Weather Display
+                    Positioned(
+                      top: 24,
+                      right: 32,
+                      child: WeatherWidget(weatherData: controller.weatherData),
+                    ),
+
+                    // Bottom Left Overlay: Guest Name & Message
+                    Positioned(
+                      left: 40,
+                      right: 40,
+                      bottom: 40,
+                      child: SingleChildScrollView(
+                        child: Column( crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (guestName.isNotEmpty)
+                              Text(
+                                guestName,
                                 style: GoogleFonts.inter(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  height: 1.45,
-                                  fontWeight: FontWeight.w400,
+                                  color: const Color(0xFFFFE389),
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
                                   shadows: [
                                     Shadow(
                                       color: Colors.black.withAlpha(200),
@@ -207,20 +187,41 @@ class _MainViewState extends State<MainView> {
                                   ],
                                 ),
                               ),
-                            ),
-                          ),
-                      ],
+                            if (guestName.isNotEmpty && guestMessage.isNotEmpty)
+                              const SizedBox(height: 12),
+                            if (guestMessage.isNotEmpty)
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxHeight: 180),
+                                child: SingleChildScrollView(
+                                  child: Text(
+                                    guestMessage,
+                                    style: GoogleFonts.inter(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      height: 1.45,
+                                      fontWeight: FontWeight.w400,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black.withAlpha(200),
+                                          blurRadius: 8,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
-      ), // Scaffold
-      ), // GestureDetector
-    ); // KeyboardListener
+    );
   }
 }
 
@@ -245,7 +246,7 @@ class _LogoWidgetState extends State<_LogoWidget> {
     return Container(
       width: double.infinity,
       height: 140,
-      color: Colors.white,
+      color: const Color(0xFF181818),
       alignment: Alignment.center,
       child: CachedNetworkImage(
         imageUrl: widget.logoUrl,

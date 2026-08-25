@@ -28,6 +28,12 @@
         android:icon="@mipmap/ic_launcher"
         android:banner="@mipmap/ic_launcher">
 
+        <!-- Disable Impeller — TV boxes crash with ImageReader/Vulkan Impeller.
+             Uses stable Skia/GL renderer instead. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false"/>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -41,12 +47,6 @@
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme"/>
-
-            <!-- Disable Impeller — TV boxes crash with ImageReader/Impeller.
-                 Uses stable Skia/GL renderer instead. -->
-            <meta-data
-                android:name="io.flutter.embedding.android.EnableImpeller"
-                android:value="false"/>
 
             <!-- Standard phone/tablet launcher -->
             <intent-filter>

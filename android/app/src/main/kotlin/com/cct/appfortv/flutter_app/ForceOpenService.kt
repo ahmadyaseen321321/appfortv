@@ -80,12 +80,10 @@ class ForceOpenService : Service() {
             action = Intent.ACTION_MAIN
             addCategory(Intent.CATEGORY_LAUNCHER)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra("navigate_to", navigateTo)
             putExtra("disconnect_type", disconnectType)
-            putExtra("launched_on_boot", true)
         }
 
         // ── ALWAYS post full-screen notification ──────────────────────────────

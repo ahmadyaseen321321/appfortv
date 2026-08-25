@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/utils/notification_service.dart';
 import '../../core/utils/shared_prefs_helper.dart';
@@ -15,8 +16,8 @@ class MainController extends ChangeNotifier {
   MainController({
     DeviceRepository? deviceRepository,
     SocketService? socketService,
-  })  : _deviceRepository = deviceRepository ?? DeviceRepository(),
-        _socketService = socketService ?? SocketService() {
+  }) : _deviceRepository = deviceRepository ?? DeviceRepository(),
+       _socketService = socketService ?? SocketService() {
     _setupNotificationListeners();
     _setupSocketListeners();
   }
@@ -33,7 +34,9 @@ class MainController extends ChangeNotifier {
     };
     // When Firebase rotates the FCM token, re-register it with the backend
     ns.onTokenRefreshed = (newToken) {
-      debugPrint('MainController: FCM token refreshed — re-registering with backend');
+      debugPrint(
+        'MainController: FCM token refreshed — re-registering with backend',
+      );
       if (_deviceData?.deviceCode != null) {
         refreshDeviceDetails(_deviceData!.deviceCode!);
       }
@@ -42,7 +45,9 @@ class MainController extends ChangeNotifier {
 
   void _setupSocketListeners() {
     _socketService.onDeviceUpdated = (newDeviceData) async {
-      debugPrint("MainController: Socket device_updated received: ${newDeviceData.deviceCode}");
+      debugPrint(
+        "MainController: Socket device_updated received: ${newDeviceData.deviceCode}",
+      );
       _deviceData = newDeviceData;
       await SharedPrefsHelper.saveUser(_deviceData!);
       _extractWeatherFromDevice(_deviceData!);
@@ -107,6 +112,12 @@ class MainController extends ChangeNotifier {
 
     if (_deviceData != null) {
       _extractWeatherFromDevice(_deviceData!);
+      // Purge any stale pending disconnect flags since an active session is running
+      try {
+        await NotificationService().clearPendingNavigation();
+      } catch (e) {
+        debugPrint('MainController: Error clearing pending flags: $e');
+      }
     }
 
     if (_deviceData?.deviceCode != null) {
@@ -124,7 +135,9 @@ class MainController extends ChangeNotifier {
     try {
       // Always include the FCM token so the backend keeps it up-to-date
       final fcmToken = await NotificationService().getToken();
-      debugPrint('MainController: refreshDeviceDetails code=$code token=$fcmToken');
+      debugPrint(
+        'MainController: refreshDeviceDetails code=$code token=$fcmToken',
+      );
 
       final response = await _deviceRepository.getDeviceDetails(
         code,
@@ -139,10 +152,11 @@ class MainController extends ChangeNotifier {
         await SharedPrefsHelper.saveUser(_deviceData!);
         _extractWeatherFromDevice(_deviceData!);
         notifyListeners();
-      } else {
-        _dialogMessage = ApiConstants.screenDisconnectedMsg;
-        await SharedPrefsHelper.clearUser();
-        notifyListeners();
+      } else if (response.data?.deviceStatus == 'disconnected' ||
+          response.message == 'Disconnected' ||
+          response.message == 'Deleted' ||
+          response.message == 'Suspended') {
+        onScreenRemoved(response.message ?? 'Disconnected');
       }
     } catch (e) {
       _isLoading = false;
@@ -191,7 +205,9 @@ class MainController extends ChangeNotifier {
 
   void onScreenRemoved(String message) async {
     if (_isDisconnected) {
-      debugPrint('MainController: onScreenRemoved — already in progress, skipping');
+      debugPrint(
+        'MainController: onScreenRemoved — already in progress, skipping',
+      );
       return;
     }
 
@@ -210,7 +226,9 @@ class MainController extends ChangeNotifier {
     _weatherData = null;
     _isDisconnected = true;
 
-    debugPrint('MainController: onScreenRemoved($message) — setting isDisconnected=true');
+    debugPrint(
+      'MainController: onScreenRemoved($message) — setting isDisconnected=true',
+    );
     notifyListeners();
   }
 

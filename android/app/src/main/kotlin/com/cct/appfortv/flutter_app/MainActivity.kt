@@ -36,7 +36,7 @@ class MainActivity : FlutterActivity() {
     private fun moveTaskToFront() {
         try {
             val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-            am.moveTaskToFront(taskId, android.app.ActivityManager.MOVE_TASK_WITH_HOME)
+            am.moveTaskToFront(taskId, 0)
         } catch (e: Exception) {
             android.util.Log.w("MainActivity", "moveTaskToFront failed: ${e.message}")
         }
@@ -90,6 +90,11 @@ class MainActivity : FlutterActivity() {
                             result.success(null)
                         }
                     }
+                    "clearPendingNavigation" -> {
+                        pendingNavigateTo = null
+                        pendingDisconnectType = null
+                        result.success(null)
+                    }
                     // Called by Flutter background isolate to launch the app
                     "sendDisconnectBroadcast" -> {
                         val args = call.arguments as? Map<*, *>
@@ -123,25 +128,5 @@ class MainActivity : FlutterActivity() {
         )
         pendingNavigateTo    = null
         pendingDisconnectType = null
-    }
-
-    /**
-     * Any remote control key press exits the app immediately.
-     *
-     * We do NOT call super first — Flutter consumes most DPAD/SELECT keys
-     * for focus traversal and would return true, preventing the exit.
-     *
-     * Volume keys are excluded so the user can still adjust volume.
-     */
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        val isVolumeKey = keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
-                          keyCode == KeyEvent.KEYCODE_VOLUME_DOWN ||
-                          keyCode == KeyEvent.KEYCODE_VOLUME_MUTE
-
-        if (!isVolumeKey) {
-            finishAffinity()  // close app and remove from recents
-            return true
-        }
-        return super.onKeyDown(keyCode, event)
     }
 }

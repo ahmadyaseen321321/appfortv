@@ -2,6 +2,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'shared_prefs_helper.dart';
 
 /// Runs in a background isolate when the app is KILLED and FCM arrives.
 /// 1. Saves disconnect flag to SharedPreferences (for CodeView to check on launch)
@@ -160,11 +161,45 @@ class NotificationService {
     await _checkPendingNavigation();
   }
 
+  /// Returns true if native MainActivity has a pending disconnect intent.
+  Future<bool> hasNativePendingDisconnect() async {
+    try {
+      final result = await _channel.invokeMethod<Map>('getPendingNavigation');
+      if (result != null && result['navigate_to'] == 'code_view') {
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  /// Clears any pending navigation flags from both native Kotlin and SharedPreferences.
+  Future<void> clearPendingNavigation() async {
+    try {
+      await _channel.invokeMethod('clearPendingNavigation');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('pending_navigate_to');
+      await prefs.remove('pending_disconnect_type');
+      debugPrint("NotificationService: Cleared all pending navigation flags.");
+    } catch (e) {
+      debugPrint("NotificationService: Error clearing pending navigation: $e");
+    }
+  }
+
   /// Asks native for any navigation intent that was set before Flutter was ready.
   /// Also checks SharedPreferences written by the background FCM handler.
   Future<void> _checkPendingNavigation() async {
     try {
       await Future.delayed(const Duration(milliseconds: 800));
+
+      final savedUser = await SharedPrefsHelper.fetchUser();
+
+      // If an active session is already saved in prefs, do NOT trigger
+      // stale pending navigation. Clear any leftover flags and exit.
+      if (savedUser != null && savedUser.deviceCode != null) {
+        await clearPendingNavigation();
+        debugPrint("NotificationService: Active session exists — cleared stale pending flags.");
+        return;
+      }
 
       // 1. Check native intent extra (set by ForceOpenService)
       final result = await _channel.invokeMethod<Map>('getPendingNavigation');

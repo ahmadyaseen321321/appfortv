@@ -6,34 +6,35 @@ import android.util.Log
 /**
  * Custom Application class.
  *
- * Sets a system property that tells ExoPlayer's MediaCodecVideoRenderer
- * to allow software decoder fallback when the hardware decoder fails.
- *
- * This fixes H.264 High Profile playback errors on Amlogic/Rockchip TV
- * boxes where the hardware codec claims format_supported=YES but then
- * throws MediaCodecVideoRenderer errors at runtime.
+ * Configures Amlogic hardware decoder properties to allow portrait/rotated
+ * video playback and software decoder fallback on Android TV boxes.
  */
 class TvApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        enableExoPlayerSoftwareFallback()
+        enableAmlogicDecoderFixes()
     }
 
-    private fun enableExoPlayerSoftwareFallback() {
+    private fun enableAmlogicDecoderFixes() {
         try {
-            // Allow ExoPlayer to fall back to software decoder when hardware fails
-            System.setProperty(
-                "media.stagefright.legacyencoder",
-                "true"
-            )
-            System.setProperty(
-                "media.stagefright.less-secure",
-                "true"
-            )
-            Log.d("TvApplication", "ExoPlayer software fallback enabled")
+            // Enable video layer rotation on Amlogic hardware decoders.
+            // Fixes buffer allocation failures (-1010 / 0xfffffc0e) when playing
+            // portrait or non-standard aspect ratio videos on Amlogic TV chips.
+            System.setProperty("vendor.media.omx.videolayerrotation.enable", "true")
+            System.setProperty("media.amlogic.omx.videolayerrotation.enable", "true")
+
+            // Enable ExoPlayer software decoder fallback properties
+            System.setProperty("media.stagefright.legacyencoder", "true")
+            System.setProperty("media.stagefright.less-secure", "true")
+
+            // Execute setprop via shell to update Android system properties directly
+            Runtime.getRuntime().exec(arrayOf("setprop", "vendor.media.omx.videolayerrotation.enable", "true"))
+            Runtime.getRuntime().exec(arrayOf("setprop", "vendor.media.omx.display_mode", "3"))
+
+            Log.d("TvApplication", "Amlogic decoder fixes and video rotation enabled successfully")
         } catch (e: Exception) {
-            Log.e("TvApplication", "Failed to set ExoPlayer properties: ${e.message}")
+            Log.e("TvApplication", "Failed to set decoder properties: ${e.message}")
         }
     }
 }

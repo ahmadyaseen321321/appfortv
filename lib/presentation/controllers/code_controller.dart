@@ -89,6 +89,11 @@ class CodeController extends ChangeNotifier {
         if (_deviceData != null) {
           await SharedPrefsHelper.saveUser(_deviceData!);
 
+          // Clear any pending disconnect flags so NotificationService doesn't
+          // trigger a false-positive redirect to CodeView.
+          await NotificationService().clearPendingNavigation();
+          await SharedPrefsHelper.clearJustDisconnected();
+
           // Subscribe to the device-specific FCM topic so the backend can
           // push targeted disconnect notifications via FCM v1.
           final deviceId = _deviceData!.id?.toString()
