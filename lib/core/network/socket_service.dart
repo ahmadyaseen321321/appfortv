@@ -50,9 +50,28 @@ class SocketService {
     _socket!.on('device_updated', (data) {
       debugPrint("SocketService: Received device_updated event: $data");
       try {
+        final Map<String, dynamic>? map = _extractMap(data);
+        if (map != null) {
+          final status = map['status']?.toString() ?? map['device_status']?.toString();
+          final message = map['message']?.toString();
+          if (status == 'disconnected' ||
+              status == 'false' ||
+              message?.toLowerCase().contains('disconnect') == true ||
+              message?.toLowerCase().contains('delete') == true) {
+            debugPrint("SocketService: device_updated payload indicates disconnection ($status / $message)");
+            onDeviceStatusDisconnected?.call();
+            return;
+          }
+        }
         final DeviceData? deviceData = _parseDevicePayload(data);
         if (deviceData != null) {
-          onDeviceUpdated?.call(deviceData);
+          if (deviceData.deviceStatus == 'disconnected' ||
+              deviceData.deviceStatus == 'Deleted' ||
+              deviceData.deviceStatus == 'Suspended') {
+            onDeviceStatusDisconnected?.call();
+          } else {
+            onDeviceUpdated?.call(deviceData);
+          }
         }
       } catch (e) {
         debugPrint("SocketService: Error parsing device_updated data: $e");

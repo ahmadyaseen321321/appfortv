@@ -29,30 +29,16 @@ class _CodeViewState extends State<CodeView> {
   Future<void> _checkSession() async {
     final controller = context.read<CodeController>();
 
-    // 1. Check if native launched us with a disconnect intent
-    final nativeDisconnect = await NotificationService().hasNativePendingDisconnect();
-    if (nativeDisconnect) {
-      await NotificationService().clearPendingNavigation();
-      await SharedPrefsHelper.clearUser();
-      return; // Stay on CodeView, DO NOT open MainView!
-    }
-
-    // 2. If a disconnect notification arrived while app was killed,
-    // the background handler saved a flag — honour it and stay on CodeView.
+    // If device was marked as disconnected or pending disconnect, stay on CodeView
+    final isDisconnected = await SharedPrefsHelper.isDisconnectedDevice();
     final hasPendingDisconnect = await controller.hasPendingDisconnect();
-    if (hasPendingDisconnect) {
+    final nativeDisconnect = await NotificationService().hasNativePendingDisconnect();
+
+    if (isDisconnected || hasPendingDisconnect || nativeDisconnect) {
+      await NotificationService().clearPendingNavigation();
       await controller.clearPendingDisconnect();
       await SharedPrefsHelper.clearUser();
-      return; // stay on CodeView
-    }
-
-    // 3. If we just came from a disconnect flow (onScreenRemoved cleared user),
-    // stay on CodeView and require fresh code entry.
-    final justDisconnected = await SharedPrefsHelper.wasJustDisconnected();
-    if (justDisconnected) {
-      await SharedPrefsHelper.clearJustDisconnected();
-      await SharedPrefsHelper.clearUser();
-      return; // stay on CodeView
+      return; // Stay on CodeView permanently!
     }
 
     final savedData = await controller.checkSavedSession();

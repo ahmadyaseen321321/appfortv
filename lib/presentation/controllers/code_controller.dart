@@ -92,7 +92,6 @@ class CodeController extends ChangeNotifier {
           // Clear any pending disconnect flags so NotificationService doesn't
           // trigger a false-positive redirect to CodeView.
           await NotificationService().clearPendingNavigation();
-          await SharedPrefsHelper.clearJustDisconnected();
 
           // Subscribe to the device-specific FCM topic so the backend can
           // push targeted disconnect notifications via FCM v1.

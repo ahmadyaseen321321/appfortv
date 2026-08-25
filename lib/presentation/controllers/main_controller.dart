@@ -46,8 +46,14 @@ class MainController extends ChangeNotifier {
   void _setupSocketListeners() {
     _socketService.onDeviceUpdated = (newDeviceData) async {
       debugPrint(
-        "MainController: Socket device_updated received: ${newDeviceData.deviceCode}",
+        "MainController: Socket device_updated received: ${newDeviceData.deviceCode} status=${newDeviceData.deviceStatus}",
       );
+      if (newDeviceData.deviceStatus == 'disconnected' ||
+          newDeviceData.deviceStatus == 'Deleted' ||
+          newDeviceData.deviceStatus == 'Suspended') {
+        onScreenRemoved('Disconnected');
+        return;
+      }
       _deviceData = newDeviceData;
       await SharedPrefsHelper.saveUser(_deviceData!);
       _extractWeatherFromDevice(_deviceData!);
@@ -152,11 +158,9 @@ class MainController extends ChangeNotifier {
         await SharedPrefsHelper.saveUser(_deviceData!);
         _extractWeatherFromDevice(_deviceData!);
         notifyListeners();
-      } else if (response.data?.deviceStatus == 'disconnected' ||
-          response.message == 'Disconnected' ||
-          response.message == 'Deleted' ||
-          response.message == 'Suspended') {
-        onScreenRemoved(response.message ?? 'Disconnected');
+      } else {
+        final msg = response.message ?? response.data?.deviceStatus ?? 'Disconnected';
+        onScreenRemoved(msg);
       }
     } catch (e) {
       _isLoading = false;
@@ -180,23 +184,17 @@ class MainController extends ChangeNotifier {
         code,
         deviceToken: fcmToken,
       );
-      if (response.status == true && response.data != null) {
+      if (response.status == true &&
+          response.data != null &&
+          response.data?.deviceStatus != 'disconnected') {
         final newData = response.data!;
-
-        if (newData.deviceStatus == 'disconnected') {
-          onScreenRemoved('Disconnected');
-          return;
-        }
-
         _deviceData = newData;
         await SharedPrefsHelper.saveUser(_deviceData!);
         _extractWeatherFromDevice(_deviceData!);
         notifyListeners();
-      } else if (response.status == false) {
-        final msg = response.message;
-        if (msg == 'Disconnected' || msg == 'Deleted' || msg == 'Suspended') {
-          onScreenRemoved(msg!);
-        }
+      } else {
+        final msg = response.message ?? response.data?.deviceStatus ?? 'Disconnected';
+        onScreenRemoved(msg);
       }
     } catch (e) {
       debugPrint("Token polling error: $e");
